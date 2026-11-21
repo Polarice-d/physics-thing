@@ -6,7 +6,6 @@ import time
 from pygame.math import lerp
 
 py.init()
-
 screen = py.display.set_mode((640,640))
 clock = py.time.Clock()
 
@@ -69,6 +68,7 @@ def render_rect(point_a: tuple[int,int], point_b: tuple[int,int], color: tuple[i
 def main():
     running = True
     while running:
+    	# rendering logic here
         screen.fill((0,0,0))
         render_rect(pivot_pos, point_pos, (255,0,0))
         for event in py.event.get():
