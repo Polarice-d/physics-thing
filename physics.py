@@ -18,7 +18,7 @@ timestep = 1/5000
 grabbing_strength = 1000
 pixels_per_meter = 200
 pendulum_len = 1.0 # Meters
-gravity = 9.81 # m/s^2
+gravity = 0.1 # m/s^2
 stiffness = 100000.0
 angle_1 = math.pi # this angle is like what you would use in a pendulum problem
 angle_2 = math.pi/2
@@ -35,6 +35,9 @@ class Vector2:
 
     def __add__(self, other):
         return Vector2(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other):
+        return Vector2(self.x - other.x, self.y - other.y)
 
     def __mul__(self, scalar):
         return Vector2(self.x * scalar, self.y * scalar)
@@ -62,24 +65,38 @@ class Vector2:
     def setc(self, x, y):
         self.x = x
         self.y = y
+
+    def magnitude(self):
+        return math.hypot(self.x, self.y)
     @staticmethod
     def from_pygame(coordinate: tuple[int, int], screen_height: int):
         return Vector2(coordinate[0]/pixels_per_meter, (screen_height - coordinate[1])/pixels_per_meter)
 
-class GameState:
+class WorldState:
     def __init__(self) -> None:
         self.mouse_pos = Vector2(0,0)
-        self.triggered_events: set[int] = {0}
+        self.triggered_events: set[Particle] = {Particle(Vector2(0,0),Vector2(0,0),0)}
+        self.energy = []
+        self.gravity = 0
+
+    def set_gravity(self, g):
+        self.gravity = g
+
+    def set_energy(self, e):
+        self.energy = e
 
 class Particle:
     def __init__(self, position_0: Vector2, velocity_0: Vector2, mass: float) -> None:
         self.pos = position_0
         self.vel = velocity_0
         self.mass = mass
-        self.forces = ()
+        self.forces = []
 
     def set_forces(self, *forces):
-        self.forces = forces
+        self.forces = [f for f in forces]
+
+    def add_force(self, force):
+        self.forces.append(force)
 
     def get_acceleration(self, positions, velocities) -> Vector2:
         acceleration = Vector2(0,0)
@@ -93,7 +110,6 @@ class Particle:
 
     def get_scalar_velocity(self):
         return math.hypot(self.vel.x, self.vel.y)
-
 
 # Force definitions
 class GlobalGravityForce:
@@ -160,6 +176,61 @@ class SpringParticlesForce:
             return -final_force
         return final_force
 
+class AttractiveForce:
+    def __init__(self, attractiveness: float, attractive_particle: Particle) -> None:
+        self.attractiveness = attractiveness
+        self.att_particle = attractive_particle
+
+    def apply(self, particle_key, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
+        position_self = positions[particle_key]
+        attractive_pos = positions[self.att_particle]
+
+        distance = get_distance(position_self, attractive_pos)
+
+        if distance == 0.0:
+            return Vector2(0,0)
+            
+        force = clamp(0, self.attractiveness / (SPHERE_RADIUS/pixels_per_meter)**2, self.attractiveness / distance**2)
+        direction = position_self - attractive_pos
+        direction /= direction.magnitude()
+
+        return direction * force
+
+class CursorForce:
+    def __init__(self, stiffness: float, dampening: float) -> None:
+        self.stiffness = stiffness
+        self.dampening = dampening
+
+    def apply(self, particle_key, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
+        if particle_key not in state.triggered_events:
+            return Vector2(0,0)
+            
+        position = positions[particle_key]
+        velocity = velocities[particle_key]
+
+        final_force = Vector2(0,0)
+        distance = get_distance(position, state.mouse_pos)
+
+        if distance == 0.0:
+            return Vector2(0,0)
+
+        force = -self.stiffness * (distance)
+        angle = math.atan2(position.y - state.mouse_pos.y, position.x - state.mouse_pos.x)
+
+        final_force.x = force * math.cos(angle)
+        final_force.y = force * math.sin(angle)
+
+        final_force -= velocity * self.dampening
+
+        return final_force
+
+def clamp(min, max, x) -> float:
+    if abs(x) <= abs(min):
+        return min
+    if abs(x) >= abs(max):
+        return max
+    return x
+
 # Particles
 pivot = Vector2(SCREEN_WIDTH//(2 * pixels_per_meter), SCREEN_HEIGHT//(2*pixels_per_meter))
 
@@ -175,10 +246,23 @@ particle_2 = Particle(
     1,
 )
 
+particle_3 = Particle(
+    Vector2(1,1),
+    Vector2(0,0),
+    1
+)
+
+particle_4 = Particle (
+    Vector2(2,2),
+    Vector2(0,0),
+    1
+)
+
 particle_1.set_forces(
     GlobalGravityForce(),
     FixedSpringForce(stiffness, pendulum_len, pivot),
-    SpringParticlesForce(stiffness, pendulum_len, particle_2)
+    SpringParticlesForce(stiffness, pendulum_len, particle_2),
+    
 )
 
 particle_2.set_forces(
@@ -186,41 +270,21 @@ particle_2.set_forces(
     SpringParticlesForce(stiffness, pendulum_len, particle_1)
 )
 
+particle_3.set_forces(
+    AttractiveForce(10, particle_4)
+)
+
 particles = [
     particle_1,
-    particle_2
+    particle_2,
+    particle_3,
+    particle_4,
 ]
+
+for p in particles:
+    p.add_force(CursorForce(1000, 30))
 # Debug
 time_elapsed = 0.0
-
-"""
-def cursor_spring_force(position: Vector2, velocity: Vector2):
-    if not active:
-        return Vector2(0,0)
-
-    final_force = Vector2(0,0)
-    distance = get_distance(particle, cursor)
-
-    force = -k * (distance)
-    angle = math.atan2(particle.y - cursor.y, particle.x - cursor.x)
-
-    final_force.x = force * math.cos(angle)
-    final_force.y = force * math.sin(angle)
-
-    final_force += -(particle_vel) * c
-
-    return final_force
-
-
-def spring_force(particle: Vector2, pivot: Vector2) -> Vector2:
-
-
-def gravity_force(g: float, mass: float) -> Vector2:
-    return Vector2(0, -mass * g)
-
-def dampening_force(velocity: Vector2, c: float):
-    return -velocity * c
-"""
 
 def get_distance(a: Vector2, b: Vector2) -> float:
     return math.hypot(a.x - b.x, a.y - b.y)
@@ -300,15 +364,14 @@ def solve(particles: list[Particle], timestep: float):
         p.vel = velocities[p] + average_velocity_d * timestep
 
 def do_physics():
-    global energies
     time_elapsed = 0
     while not stop.is_set():
         # Ts was not worth one bit of the effort
         solve(particles, timestep)
-        energies = calc_energy(particles)
+        state.set_energy(calc_energy(particles))
 
         time_elapsed += timestep
-        time.sleep(timestep)
+        time.sleep(timestep*10)
 
 def render_pendulum(point_a: tuple[int,int], point_b: tuple[int,int], color: tuple[int,int,int], thickness: int):
     distance = math.floor(math.hypot((point_b[0]-point_a[0]), (point_b[1]-point_a[1])))
@@ -331,8 +394,6 @@ def render_pendulum(point_a: tuple[int,int], point_b: tuple[int,int], color: tup
     screen.blit(new_image, rect)
 
 def main():
-    global gravity
-    global energies
     running = True
     while running:
         state.mouse_pos = Vector2.from_pygame(py.mouse.get_pos(), SCREEN_HEIGHT)
@@ -350,8 +411,8 @@ def main():
         #py.draw.circle(screen, (255,0,0), particle1_pos.convert_pygame(SCREEN_HEIGHT), SPHERE_RADIUS)
         #py.draw.circle(screen, (255,0,0), particle2_pos.convert_pygame(SCREEN_HEIGHT), SPHERE_RADIUS)
 
-        #if 1 in state.triggered_events:
-            #render_pendulum(particle1_pos.convert_pygame(SCREEN_HEIGHT), state.mouse_pos.convert_pygame(SCREEN_HEIGHT), (0,0,255), 5)
+        for particle in state.triggered_events:
+            render_pendulum(particle.pos.convert_pygame(SCREEN_HEIGHT), state.mouse_pos.convert_pygame(SCREEN_HEIGHT), (0,0,255), 5)
 
 
         # boilerplate
@@ -361,18 +422,20 @@ def main():
                 running = False
                 stop.set()
 
-            #if event.type == MOUSEBUTTONDOWN:
-                #if get_distance(state.mouse_pos, particle1_pos) <= SPHERE_RADIUS:
-                #    state.triggered_events.add(1)
+            if event.type == MOUSEBUTTONDOWN:
+                print(state.mouse_pos)
+                for particle in particles:
+                    if get_distance(state.mouse_pos, particle.pos) <= SPHERE_RADIUS/pixels_per_meter:
+                        state.triggered_events.add(particle)
 
             if event.type == MOUSEBUTTONUP:
                 state.triggered_events.clear()
 
         gravity = round(g_slider.getValue(), 2)
         g_label.setText(f"Gravity: {gravity} m/s²")
-        total_energy_label.setText(f"Total Energy: {round(energies[2], 2)} J")
-        kinetic_energy_label.setText(f"Kinetic Energy: {round(energies[0], 2)} J")
-        potential_energy_label.setText(f"Potential Energy: {round(energies[1], 2)} J")
+        total_energy_label.setText(f"Total Energy: {round(state.energy[2], 2)} J")
+        kinetic_energy_label.setText(f"Kinetic Energy: {round(state.energy[0], 2)} J")
+        potential_energy_label.setText(f"Potential Energy: {round(state.energy[1], 2)} J")
         pygame_widgets.update(events)
         dt = clock.tick(60) / 1000
         dt = min(0.1, dt)
@@ -385,7 +448,8 @@ stop = threading.Event()
 py.init()
 screen = py.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = py.time.Clock()
-state = GameState()
+state = WorldState()
+state.triggered_events.clear()
 g_slider = Slider(screen, 450, 600, 300, 20, min=-2*gravity, max=2*gravity, step=0.01, initial=gravity, handleColour=(255,0,0))
 g_label = TextBox(screen, 450, 650, 275, 40, fontSize=24)
 g_label.disable()
