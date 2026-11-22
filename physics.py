@@ -22,6 +22,7 @@ gravity = 9.81 # m/s^2
 stiffness = 100000.0
 angle_1 = math.pi # this angle is like what you would use in a pendulum problem
 angle_2 = math.pi/2
+total_energy = 0
 
 # X and Y are defined as +x is right and +y is up
 class Vector2:
@@ -86,6 +87,13 @@ class Particle:
             acceleration += force.apply(self, positions, velocities)
 
         return acceleration
+
+    def get_mass(self):
+        return self.mass
+
+    def get_scalar_velocity(self):
+        return math.hypot(self.vel.x, self.vel.y)
+
 
 # Force definitions
 class GlobalGravityForce:
@@ -215,7 +223,7 @@ def dampening_force(velocity: Vector2, c: float):
 """
 
 def get_distance(a: Vector2, b: Vector2) -> float:
-    return math.hypot(b.x - a.x, b.y - a.y)
+    return math.hypot(a.x - b.x, a.y - b.y)
 
 def get_accelerations(particles:list[Particle], positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]) -> dict[Particle, Vector2]:
     accelerations = {}
@@ -223,6 +231,20 @@ def get_accelerations(particles:list[Particle], positions: dict[Particle, Vector
         accelerations[particle] = particle.get_acceleration(positions, velocities) / particle.mass
 
     return accelerations
+
+def calc_energy(particles:list[Particle]):
+    ke = 0
+    pe = 0
+    pe_g = 0
+    pe_s = 0
+    for particle in particles:
+        ke += 0.5 * particle.get_mass() * (particle.get_scalar_velocity())**2
+        pe_g += particle.get_mass() * particle.pos.y * gravity
+    pe_s += 0.5 * stiffness * (get_distance(pivot, particle_1.pos) - pendulum_len)**2
+    pe_s += 0.5 * stiffness * (get_distance(particle_1.pos, particle_2.pos) - pendulum_len)**2
+    pe = pe_s + pe_g
+    te = pe + ke
+    return [ke, pe, te]
 
 def rk4_advance(values, rates_change, step):
     final = {}
@@ -278,10 +300,12 @@ def solve(particles: list[Particle], timestep: float):
         p.vel = velocities[p] + average_velocity_d * timestep
 
 def do_physics():
+    global energies
     time_elapsed = 0
     while not stop.is_set():
         # Ts was not worth one bit of the effort
         solve(particles, timestep)
+        energies = calc_energy(particles)
 
         time_elapsed += timestep
         time.sleep(timestep)
@@ -308,6 +332,7 @@ def render_pendulum(point_a: tuple[int,int], point_b: tuple[int,int], color: tup
 
 def main():
     global gravity
+    global energies
     running = True
     while running:
         state.mouse_pos = Vector2.from_pygame(py.mouse.get_pos(), SCREEN_HEIGHT)
@@ -336,7 +361,6 @@ def main():
                 running = False
                 stop.set()
 
-            print(state.mouse_pos)
             #if event.type == MOUSEBUTTONDOWN:
                 #if get_distance(state.mouse_pos, particle1_pos) <= SPHERE_RADIUS:
                 #    state.triggered_events.add(1)
@@ -346,6 +370,9 @@ def main():
 
         gravity = round(g_slider.getValue(), 2)
         g_label.setText(f"Gravity: {gravity} m/s²")
+        total_energy_label.setText(f"Total Energy: {round(energies[2], 2)} J")
+        kinetic_energy_label.setText(f"Kinetic Energy: {round(energies[0], 2)} J")
+        potential_energy_label.setText(f"Potential Energy: {round(energies[1], 2)} J")
         pygame_widgets.update(events)
         dt = clock.tick(60) / 1000
         dt = min(0.1, dt)
@@ -360,8 +387,14 @@ screen = py.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = py.time.Clock()
 state = GameState()
 g_slider = Slider(screen, 450, 600, 300, 20, min=-2*gravity, max=2*gravity, step=0.01, initial=gravity, handleColour=(255,0,0))
-g_label = TextBox(screen, 450, 650, 250, 50, fontSize=24)
+g_label = TextBox(screen, 450, 650, 275, 40, fontSize=24)
 g_label.disable()
+total_energy_label = TextBox(screen, 450, 700, 275, 40, fontSize=24)
+total_energy_label.disable()
+kinetic_energy_label = TextBox(screen, 450, 750, 275, 40, fontSize=24)
+kinetic_energy_label.disable()
+potential_energy_label = TextBox(screen, 450, 800, 275, 40, fontSize=24)
+potential_energy_label.disable()
 
 # Running stuff
 t1 = threading.Thread(target=do_physics)
