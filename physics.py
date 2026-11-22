@@ -4,6 +4,9 @@ import math
 import time
 from pygame.constants import MOUSEBUTTONDOWN, MOUSEBUTTONUP
 from pygame.math import lerp
+import pygame_widgets
+from pygame_widgets.slider import Slider
+from pygame_widgets.textbox import TextBox
 
 # Simulation settings
 SCREEN_HEIGHT = 2000
@@ -16,7 +19,7 @@ grabbing_strength = 1000
 pixels_per_meter = 200
 pendulum_len = 1.0 # Meters
 gravity = 9.81 # m/s^2
-stiffness = 100000.0 
+stiffness = 100000.0
 angle_1 = math.pi # this angle is like what you would use in a pendulum problem
 angle_2 = math.pi/2
 
@@ -43,7 +46,7 @@ class Vector2:
 
     def __neg__(self):
         return Vector2(-self.x, -self.y)
-    
+
     def convert_pygame(self, screen_height) -> tuple[int, int]:
         """
         Converts from real physics (tm) position to freaky pygame pixel coordinates
@@ -85,6 +88,13 @@ class Particle:
         return acceleration
 
 # Force definitions
+class GlobalGravityForce:
+    def __init__(self) -> None:
+        pass
+
+    def apply(self, particle: Particle, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
+        return Vector2(0, -gravity * particle.mass)
+
 class GravityForce:
     def __init__(self, g) -> None:
         self.g = g
@@ -100,19 +110,19 @@ class FixedSpringForce:
 
     def apply(self, particle_key, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
         position = positions[particle_key]
-        
+
         final_force = Vector2(0,0)
         distance = get_distance(position, self.pivot_pos)
 
         if distance == 0.0:
             return Vector2(0,0)
-    
+
         force = -self.k * (distance - self.natural_len)
         angle = math.atan2(position.y - self.pivot_pos.y, position.x - self.pivot_pos.x)
-        
+
         final_force.x = force * math.cos(angle)
         final_force.y = force * math.sin(angle)
-    
+
         return final_force
 
 class SpringParticlesForce:
@@ -125,23 +135,23 @@ class SpringParticlesForce:
     def apply(self, particle_key, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
         position_1 = positions[particle_key]
         position_2 = positions[self.other_particle]
-        
+
         final_force = Vector2(0,0)
         distance = get_distance(position_1, position_2)
 
         if distance == 0.0:
             return Vector2(0,0)
-    
+
         force = -self.k * (distance - self.natural_len)
         angle = math.atan2(position_1.y - position_2.y, position_1.x - position_2.x)
-        
+
         final_force.x = force * math.cos(angle)
         final_force.y = force * math.sin(angle)
 
         if self.negative:
             return -final_force
         return final_force
-    
+
 # Particles
 pivot = Vector2(SCREEN_WIDTH//(2 * pixels_per_meter), SCREEN_HEIGHT//(2*pixels_per_meter))
 
@@ -158,18 +168,18 @@ particle_2 = Particle(
 )
 
 particle_1.set_forces(
-    GravityForce(gravity),
+    GlobalGravityForce(),
     FixedSpringForce(stiffness, pendulum_len, pivot),
     SpringParticlesForce(stiffness, pendulum_len, particle_2)
 )
 
 particle_2.set_forces(
-    GravityForce(gravity),
+    GlobalGravityForce(),
     SpringParticlesForce(stiffness, pendulum_len, particle_1)
 )
 
 particles = [
-    particle_1, 
+    particle_1,
     particle_2
 ]
 # Debug
@@ -185,17 +195,17 @@ def cursor_spring_force(position: Vector2, velocity: Vector2):
 
     force = -k * (distance)
     angle = math.atan2(particle.y - cursor.y, particle.x - cursor.x)
-    
+
     final_force.x = force * math.cos(angle)
     final_force.y = force * math.sin(angle)
 
     final_force += -(particle_vel) * c
-    
+
     return final_force
 
 
 def spring_force(particle: Vector2, pivot: Vector2) -> Vector2:
-    
+
 
 def gravity_force(g: float, mass: float) -> Vector2:
     return Vector2(0, -mass * g)
@@ -223,10 +233,10 @@ def rk4_advance(values, rates_change, step):
 
 def solve(particles: list[Particle], timestep: float):
     halfstep = timestep / 2
-    
+
     positions = {}
     velocities = {}
-    
+
     for p in particles:
         positions[p] = p.pos
         velocities[p] = p.vel
@@ -256,7 +266,7 @@ def solve(particles: list[Particle], timestep: float):
             + 2 * d_stage3_pos[p]
             + d_stage4_pos[p]
         ) * (1/6)
-        
+
         average_velocity_d = (
             d_stage1_vel[p]
             + 2 * d_stage2_vel[p]
@@ -272,7 +282,7 @@ def do_physics():
     while not stop.is_set():
         # Ts was not worth one bit of the effort
         solve(particles, timestep)
-        
+
         time_elapsed += timestep
         time.sleep(timestep)
 
@@ -297,34 +307,35 @@ def render_pendulum(point_a: tuple[int,int], point_b: tuple[int,int], color: tup
     screen.blit(new_image, rect)
 
 def main():
+    global gravity
     running = True
     while running:
         state.mouse_pos = Vector2.from_pygame(py.mouse.get_pos(), SCREEN_HEIGHT)
-        
+
     	# rendering logic here
         screen.fill((0,0,0))
 
 
         for p in particles:
             py.draw.circle(screen, (255,0,0), p.pos.convert_pygame(SCREEN_HEIGHT), SPHERE_RADIUS)
-            
-            
+
+
         render_pendulum(particle_1.pos.convert_pygame(SCREEN_HEIGHT), particle_2.pos.convert_pygame(SCREEN_HEIGHT), PENDULUM_COLOR, LINE_WIDTH)
         render_pendulum(particle_1.pos.convert_pygame(SCREEN_HEIGHT), pivot.convert_pygame(SCREEN_HEIGHT), PENDULUM_COLOR, LINE_WIDTH)
         #py.draw.circle(screen, (255,0,0), particle1_pos.convert_pygame(SCREEN_HEIGHT), SPHERE_RADIUS)
         #py.draw.circle(screen, (255,0,0), particle2_pos.convert_pygame(SCREEN_HEIGHT), SPHERE_RADIUS)
-        
+
         #if 1 in state.triggered_events:
             #render_pendulum(particle1_pos.convert_pygame(SCREEN_HEIGHT), state.mouse_pos.convert_pygame(SCREEN_HEIGHT), (0,0,255), 5)
-        py.display.update()
 
 
         # boilerplate
-        for event in py.event.get():
+        events = py.event.get()
+        for event in events:
             if event.type == py.QUIT:
                 running = False
                 stop.set()
-            
+
             print(state.mouse_pos)
             #if event.type == MOUSEBUTTONDOWN:
                 #if get_distance(state.mouse_pos, particle1_pos) <= SPHERE_RADIUS:
@@ -333,6 +344,9 @@ def main():
             if event.type == MOUSEBUTTONUP:
                 state.triggered_events.clear()
 
+        gravity = round(g_slider.getValue(), 2)
+        g_label.setText(f"Gravity: {gravity} m/s²")
+        pygame_widgets.update(events)
         dt = clock.tick(60) / 1000
         dt = min(0.1, dt)
         py.display.flip()
@@ -345,6 +359,9 @@ py.init()
 screen = py.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = py.time.Clock()
 state = GameState()
+g_slider = Slider(screen, 450, 600, 300, 20, min=-2*gravity, max=2*gravity, step=0.01, initial=gravity, handleColour=(255,0,0))
+g_label = TextBox(screen, 450, 650, 250, 50, fontSize=24)
+g_label.disable()
 
 # Running stuff
 t1 = threading.Thread(target=do_physics)
