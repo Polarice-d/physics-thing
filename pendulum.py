@@ -8,13 +8,15 @@ from pygame.math import lerp
 import pygame_widgets
 from pygame_widgets.slider import Slider
 from pygame_widgets.textbox import TextBox
+from pygame_widgets.button import Button
+from pygame_widgets.toggle import Toggle
 
 class GlobalGravityForce:
     def __init__(self) -> None:
         pass
 
     def apply(self, particle: Particle, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
-        return Vector2(0, -gravity * particle.mass)
+        return Vector2(0, -state.gravity * particle.mass)
 
 class CursorForce:
     def __init__(self, stiffness: float, dampening: float) -> None:
@@ -44,12 +46,43 @@ class CursorForce:
 
         return final_force
 
+class AirResistanceForce:
+    def __init__(self):
+        pass
+
+    def apply(self, particle_key, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
+
+        position = positions[particle_key]
+        velocity = velocities[particle_key]
+
+        velocity_mag = math.hypot(velocity.x, velocity.y)
+
+        final_force = Vector2(0,0)
+
+        force_mag_x = -1 * state.drag * (velocity.x)**2
+        force_mag_y = -1 * state.drag * (velocity.y)**2
+
+        if velocity.x == 0:
+            final_force.x = 0
+        else:
+            final_force.x = velocity.x / velocity_mag * force_mag_x
+        if velocity.y == 0:
+            final_force.y = 0
+        else:
+            final_force.y = velocity.y / velocity_mag * force_mag_y
+
+        return final_force
+
+
 class WorldState:
     def __init__(self) -> None:
         self.mouse_pos = Vector2(0,0)
         self.triggered_events: set[Particle] = {Particle(Vector2(0,0),Vector2(0,0),0)}
         self.energy = []
         self.gravity = 0
+        self.paused = False
+        self.time_elapsed = 0
+        self.drag = 0.01
 
     def set_gravity(self, g):
         self.gravity = g
@@ -58,20 +91,20 @@ class WorldState:
         self.energy = e
 
 # Simulation settings
+state = WorldState()
 SCREEN_HEIGHT = 2000
 SCREEN_WIDTH = 2000
 PENDULUM_COLOR = (0,255,0)
 LINE_WIDTH = 7
 SPHERE_RADIUS = 15
-timestep = 1/5000
+timestep = 1/750
 grabbing_strength = 1000
 pixels_per_meter = 200
 pendulum_len = 1.0 # Meters
 gravity = 9.81 # m/s^2
 stiffness = 100000.0
-angle_1 = math.pi # this angle is like what you would use in a pendulum problem
+angle_1 = math.pi/2 # this angle is like what you would use in a pendulum problem
 angle_2 = math.pi/2
-total_energy = 0
 
 def convert_pygame(vector, screen_height) -> tuple[int, int]:
     return (round(vector.x * pixels_per_meter), round(screen_height - (vector.y * pixels_per_meter)))
@@ -79,14 +112,14 @@ def convert_pygame(vector, screen_height) -> tuple[int, int]:
 def from_pygame(coordinate: tuple[int, int], screen_height: int):
     return Vector2(coordinate[0]/pixels_per_meter, (screen_height - coordinate[1])/pixels_per_meter)
 
-def calc_energy(particles:list[Particle]):
+def calc_energy(particles:list[Particle], pivot:Vector2):
     ke = 0
     pe = 0
     pe_g = 0
     pe_s = 0
     for particle in particles:
         ke += 0.5 * particle.get_mass() * (particle.get_scalar_velocity())**2
-        pe_g += particle.get_mass() * particle.pos.y * gravity
+        pe_g += particle.get_mass() * abs(particle.pos.y - (pivot.y - 2*pendulum_len )) * state.gravity
     pe_s += 0.5 * stiffness * (get_distance(pivot, particle_1.pos) - pendulum_len)**2
     pe_s += 0.5 * stiffness * (get_distance(particle_1.pos, particle_2.pos) - pendulum_len)**2
     pe = pe_s + pe_g
@@ -128,6 +161,7 @@ particles = [
 
 for p in particles:
     p.add_force(CursorForce(1000, 30))
+    p.add_force(AirResistanceForce())
 
 def render_pendulum(point_a: tuple[int,int], point_b: tuple[int,int], color: tuple[int,int,int], thickness: int):
     distance = math.floor(math.hypot((point_b[0]-point_a[0]), (point_b[1]-point_a[1])))
@@ -150,13 +184,13 @@ def render_pendulum(point_a: tuple[int,int], point_b: tuple[int,int], color: tup
     screen.blit(new_image, rect)
 
 def do_physics():
-    time_elapsed = 0
     while not stop.is_set():
         # Ts was not worth one bit of the effort
-        step_sim(particles, timestep)
-        state.set_energy(calc_energy(particles))
+        if not state.paused:
+            step_sim(particles, timestep)
+            state.set_energy(calc_energy(particles, pivot))
+            state.time_elapsed += timestep
 
-        time_elapsed += timestep
         time.sleep(timestep)
 
 def main():
@@ -196,11 +230,17 @@ def main():
             if event.type == MOUSEBUTTONUP:
                 state.triggered_events.clear()
 
-        gravity = round(g_slider.getValue(), 2)
-        g_label.setText(f"Gravity: {gravity} m/s²")
-        total_energy_label.setText(f"Total Energy: {round(state.energy[2], 2)} J")
-        kinetic_energy_label.setText(f"Kinetic Energy: {round(state.energy[0], 2)} J")
-        potential_energy_label.setText(f"Potential Energy: {round(state.energy[1], 2)} J")
+        state.gravity = round(g_slider.getValue(), 2)
+        g_label.setText(f"Gravity: {state.gravity} m/s²")
+        total_energy_label.setText(f"Total Energy: {round(state.energy[2], 4)} J")
+        kinetic_energy_label.setText(f"Kinetic Energy: {round(state.energy[0], 4)} J")
+        potential_energy_label.setText(f"Potential Energy: {round(state.energy[1], 4)} J")
+        time_elapsed_label.setText(f"Time Elapsed: {round(state.time_elapsed, 4)} s")
+        on_condition = "running" if on_off_toggle.getValue() else "paused"
+        toggle_label.setText(f'Simulation {on_condition}')
+        state.paused = not on_off_toggle.getValue()
+        state.drag = round(drag_slider.getValue(), 4)
+        drag_label.setText(f"Drag: {round(state.drag * 100, 2)}")
         pygame_widgets.update(events)
         dt = clock.tick(60) / 1000
         dt = min(0.1, dt)
@@ -213,17 +253,27 @@ stop = threading.Event()
 py.init()
 screen = py.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 clock = py.time.Clock()
-state = WorldState()
 state.triggered_events.clear()
-g_slider = Slider(screen, 450, 600, 300, 20, min=-2*gravity, max=2*gravity, step=0.01, initial=gravity, handleColour=(255,0,0))
-g_label = TextBox(screen, 450, 650, 275, 40, fontSize=24)
+
+# pygame widgets
+g_slider = Slider(screen, 400, 600, 300, 20, min=0, max=4*gravity, step=0.01, initial=gravity, handleColour=(255,0,0))
+g_label = TextBox(screen, 400, 650, 300, 40, fontSize=24)
 g_label.disable()
-total_energy_label = TextBox(screen, 450, 700, 275, 40, fontSize=24)
+total_energy_label = TextBox(screen, 400, 700, 300, 40, fontSize=24)
 total_energy_label.disable()
-kinetic_energy_label = TextBox(screen, 450, 750, 275, 40, fontSize=24)
+kinetic_energy_label = TextBox(screen, 400, 750, 300, 40, fontSize=24)
 kinetic_energy_label.disable()
-potential_energy_label = TextBox(screen, 450, 800, 275, 40, fontSize=24)
+potential_energy_label = TextBox(screen, 400, 800, 300, 40, fontSize=24)
 potential_energy_label.disable()
+on_off_toggle = Toggle(screen, 870, 600, 40, 20, startOn=True, handleOnColour=(255,0,0),onColour=(0,0,255))
+toggle_label = TextBox(screen, 940, 590, 210, 40, fontSize=24)
+toggle_label.disable()
+time_elapsed_label = TextBox(screen, 850, 650, 300, 40, fontSize=24)
+time_elapsed_label.disable()
+drag_slider = Slider(screen, 1300, 600, 300, 20, min=0, max=0.4, step=0.0001, initial=0, handleColour=(255,0,0))
+drag_label = TextBox(screen, 1300, 650, 300, 40, fontSize=24)
+drag_label.disable()
+
 
 # Running stuff
 t1 = threading.Thread(target=do_physics)
