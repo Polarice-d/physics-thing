@@ -24,7 +24,7 @@ class CursorForce:
     def apply(self, particle_key, positions: dict[Particle, Vector2], velocities: dict[Particle, Vector2]):
         if particle_key not in state.triggered_events:
             return Vector2(0,0)
-            
+
         position = positions[particle_key]
         velocity = velocities[particle_key]
 
@@ -67,7 +67,7 @@ timestep = 1/5000
 grabbing_strength = 1000
 pixels_per_meter = 200
 pendulum_len = 1.0 # Meters
-gravity = 0.1 # m/s^2
+gravity = 9.81 # m/s^2
 stiffness = 100000.0
 angle_1 = math.pi # this angle is like what you would use in a pendulum problem
 angle_2 = math.pi/2
@@ -108,23 +108,11 @@ particle_2 = Particle(
     1,
 )
 
-particle_3 = Particle(
-    Vector2(1,1),
-    Vector2(0,0),
-    1
-)
-
-particle_4 = Particle (
-    Vector2(2,2),
-    Vector2(0,0),
-    1
-)
-
 particle_1.set_forces(
     GlobalGravityForce(),
     FixedSpringForce(stiffness, pendulum_len, pivot),
     SpringParticlesForce(stiffness, pendulum_len, particle_2),
-    
+
 )
 
 particle_2.set_forces(
@@ -132,15 +120,10 @@ particle_2.set_forces(
     SpringParticlesForce(stiffness, pendulum_len, particle_1)
 )
 
-particle_3.set_forces(
-    AttractiveForce(10, particle_4, SPHERE_RADIUS/pixels_per_meter)
-)
 
 particles = [
     particle_1,
     particle_2,
-    particle_3,
-    particle_4,
 ]
 
 for p in particles:
@@ -206,7 +189,6 @@ def main():
                 stop.set()
 
             if event.type == MOUSEBUTTONDOWN:
-                print(state.mouse_pos)
                 for particle in particles:
                     if get_distance(state.mouse_pos, particle.pos) <= SPHERE_RADIUS/pixels_per_meter:
                         state.triggered_events.add(particle)
