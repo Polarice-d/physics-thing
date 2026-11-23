@@ -232,12 +232,12 @@ def main():
 
         state.gravity = round(g_slider.getValue(), 2)
         g_label.setText(f"Gravity: {state.gravity} m/s²")
-        total_energy_label.setText(f"Total Energy: {round(state.energy[2], 4)} J")
-        kinetic_energy_label.setText(f"Kinetic Energy: {round(state.energy[0], 4)} J")
-        potential_energy_label.setText(f"Potential Energy: {round(state.energy[1], 4)} J")
-        time_elapsed_label.setText(f"Time Elapsed: {round(state.time_elapsed, 4)} s")
+        total_energy_label.setText(f"Total Energy: {round(state.energy[2], 3)} J")
+        kinetic_energy_label.setText(f"Kinetic Energy: {round(state.energy[0], 3)} J")
+        potential_energy_label.setText(f"Potential Energy: {round(state.energy[1], 3)} J")
+        time_elapsed_label.setText(f"Time Elapsed: {round(state.time_elapsed, 3)} s")
         on_condition = "running" if on_off_toggle.getValue() else "paused"
-        toggle_label.setText(f'Simulation {on_condition}')
+        toggle_label.setText(f'Sim: {on_condition}')
         state.paused = not on_off_toggle.getValue()
         state.drag = round(drag_slider.getValue(), 4)
         drag_label.setText(f"Drag: {round(state.drag * 100, 2)}")
