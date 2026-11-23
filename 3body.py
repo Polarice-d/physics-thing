@@ -69,7 +69,7 @@ class WorldState:
         self.mouse_pos = Vector2(0,0)
         self.triggered_events: set[Particle] = {Particle(Vector2(0,0),Vector2(0,0),0)}
         self.energy = []
-        self.gravity = 1
+        self.gravity = 6
         self.time_elapsed = 0
         self.paused = False
 
@@ -223,7 +223,7 @@ def main():
                 state.triggered_events.clear()
 
         state.gravity = round(g_slider.getValue(), 2)
-        g_label.setText(f"Gravity: {state.gravity} m/s²")
+        g_label.setText(f"Gravity constant: {state.gravity}")
         total_energy_label.setText(f"Total Energy: {round(state.energy[2], 2)} J")
         kinetic_energy_label.setText(f"Kinetic Energy: {round(state.energy[0], 2)} J")
         potential_energy_label.setText(f"Potential Energy: {round(state.energy[1], 2)} J")
