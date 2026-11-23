@@ -128,7 +128,7 @@ class AttractiveForce:
 
         if distance == 0.0:
             return Vector2(0,0)
-            
+
         force = clamp(0, self.attractiveness / (self.min_radius)**2, self.attractiveness / distance**2)
         direction = position_self - attractive_pos
         direction /= direction.magnitude()
@@ -163,6 +163,7 @@ def _rk4_advance(values, rates_change, step):
     return final
 
 def step_sim(particles: list[Particle], timestep: float):
+
     halfstep = timestep / 2
 
     positions = {}
